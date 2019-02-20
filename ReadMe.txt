@@ -1,0 +1,1 @@
+Run the scripting language by dragging the .phg file directly to Phage.exe
