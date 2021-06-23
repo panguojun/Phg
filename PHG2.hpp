@@ -1,5 +1,5 @@
 /****************************************************************************
-				Phg2.0
+							Phg2.0
 
 ****************************************************************************/
 namespace PHG
@@ -90,6 +90,11 @@ namespace PHG
 		var cur() {
 			ASSERT(top != -1);
 			return buff[top];
+		}
+		var get(int pos) {
+			ASSERT(top != -1);
+			ASSERT(top - pos >= 0);
+			return buff[top - pos];
 		}
 		valstack_t() {
 			top = -1;
@@ -259,9 +264,12 @@ namespace PHG
 	static var act(code& cd, int valcnt)
 	{
 		opr o = cd.oprstack.pop();
+
+		PRINT("act " << o << " valcnt = " << valcnt)
+
 		switch (o) {
 		case '+': {
-			if (valcnt == 2) {
+			if (valcnt > 1) {
 				var b = cd.valstack.pop();
 				var a = cd.valstack.pop();
 				return a + b;
@@ -271,7 +279,7 @@ namespace PHG
 			}
 		}
 		case '-': {
-			if (valcnt == 2) {
+			if (valcnt > 1) {
 				var b = cd.valstack.pop();
 				var a = cd.valstack.pop();
 				return a - b;
@@ -382,7 +390,7 @@ namespace PHG
 		}
 	}
 
-	// 表达式 for example: x=a+b, v = fun(x), x>2 ||x < 5
+	// 表达式 for example: x=a+b, v = fun(x), x > 2 || x < 5
 	static var expr(code& cd)
 	{
 		int valcnt = 0;
@@ -439,7 +447,7 @@ namespace PHG
 					cd.valstack.push(v);
 					valcnt++;
 				}
-				else if (c == ')' || c == ';' || c == ',' || c == '{' || c == '\0') {
+				else if (c == ')' || c == ';' || c == ',' || c == '{' || c == '\n') {
 
 					if (!cd.oprstack.empty() &&
 						(iscalc(cd.oprstack.cur()) || islogic(cd.oprstack.cur())))
@@ -453,7 +461,6 @@ namespace PHG
 		ERRORMSG("';' is missing?");
 		return INVALIDVAR;
 	}
-
 	// single var
 	static void singvar(code& cd) {
 		string name = cd.getname();
@@ -494,7 +501,7 @@ namespace PHG
 	{
 		while (!cd.eoc()) {
 			short type = get(cd);
-			PRINTV(type);
+			
 			if (cd.cur() == '{') 
 			{
 				cd.next();
@@ -634,7 +641,9 @@ namespace PHG
 		}
 
 		cd.codestack.push(cd.ptr);
-		if (cd.funcnamemap.find(fnm) == INVALIDFUN)
+
+		if (api_list.find(cd.getname()) != api_list.end() || 
+			cd.funcnamemap.find(fnm) == INVALIDFUN)
 		{
 			ERRORMSG("No function named: '" << fnm << "'")
 			return INVALIDVAR;
@@ -646,6 +655,8 @@ namespace PHG
 
 		cd.varmapstack.push();
 		cd.next();
+		std::vector<std::string> paramnamelist;
+		std::vector<var> paramvallist;
 		while (!cd.eoc()) {
 			char c = cd.cur();
 			if (c == ')') {
@@ -656,9 +667,15 @@ namespace PHG
 				cd.next();
 			}
 			else {
-				cd.varmapstack.addvar(cd.getname(), cd.valstack.pop());
+				paramnamelist.push_back(cd.getname());
+				paramvallist.push_back(cd.valstack.pop());
 				cd.next2();
 			}
+		}
+
+		for(int i = 0; i < paramnamelist.size(); i ++)
+		{
+			cd.varmapstack.addvar(paramnamelist[i].c_str(), paramvallist[paramvallist.size() - 1 - i]);
 		}
 
 		var ret = INVALIDVAR;
@@ -675,7 +692,26 @@ namespace PHG
 		funcname fnm = cd.getname();
 		if (api_list.find(fnm) != api_list.end())
 		{
-			cd.next2();
+			PRINT("API:" << fnm);
+			ASSERT(cd.next2() == '(');
+
+			cd.next();
+			while (!cd.eoc()) {
+				char c = cd.cur();
+				if (c == ')') {
+					cd.next();
+					break;
+				}
+				else if (c == ',') {
+					cd.next();
+					continue;
+				}
+				else {
+					var e = expr(cd);
+					//PRINTV(e);
+					cd.valstack.push(e);
+				}
+			}
 			return api_list[fnm](cd);
 		}
 		else
@@ -703,6 +739,7 @@ namespace PHG
 		rank['*'] = 2;
 		rank['/'] = 2;
 		rank['!'] = 3;
+
 		getchar();
 
 		cd.varmapstack.push();
