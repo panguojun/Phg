@@ -11,7 +11,7 @@ namespace PHG
 	#define opr			char
 	#define varname		string
 	#define funcname	string
-	#define function	const char*
+	#define functionptr	const char*
 
 	#define NAME		0x01FF
 	#define NUMBER		0x02FF
@@ -25,7 +25,14 @@ namespace PHG
 
 	char rank[256];
 
+	// API
+	typedef var (*fun_t)(code& cd);
+	std::map<string, fun_t> api_list;
+
 	// -----------------------------------------------------------------------
+	inline bool checkline(char c) {
+		return (c == '\n');
+	}
 	inline bool checkspace(char c) {
 		return (c == ' ' || c == '\t' || c == '\n' || c == '\r');
 	}
@@ -42,7 +49,7 @@ namespace PHG
 		return c == '(';
 	}
 	// stacks define
-	struct codestack_t 
+	static struct codestack_t
 	{
 		const char* buff[1024];
 		int top;
@@ -66,7 +73,7 @@ namespace PHG
 		}
 	};
 
-	struct valstack_t 
+	static struct valstack_t
 	{
 		var buff[1024];
 		int top;
@@ -89,7 +96,7 @@ namespace PHG
 		}
 	};
 
-	struct oprstack_t
+	static struct oprstack_t
 	{
 		opr buff[1024];
 		int top;
@@ -117,7 +124,7 @@ namespace PHG
 		}
 	};
 
-	struct varmapstack_t
+	static struct varmapstack_t
 	{
 		using varmap_t = std::map<varname, var>;
 		std::vector<varmap_t> stack;
@@ -161,23 +168,24 @@ namespace PHG
 	};
 
 	// code
-	struct code 
+	static struct code
 	{
 		const char* ptr;
-		std::map<funcname, function>	funcnamemap;		
+		std::map<funcname, functionptr>	funcnamemap;		
 		varmapstack_t	varmapstack;
 
 		codestack_t		codestack;
 		valstack_t		valstack;
 		oprstack_t		oprstack;
 
+		code() {}
 		code(const char* buf) {
 			ptr = buf;
 			varmapstack.clear();
 			funcnamemap.clear();
 		}
 		char next() {
-			while (!eoc() && checkspace(*(++ptr)));
+			while (!eoc(++ptr) && checkspace(*(ptr)));
 			return (*ptr);
 		}
 		char next2() {
@@ -187,9 +195,13 @@ namespace PHG
 			}
 			return (*ptr);
 		}
+		char nextline() {
+			while (!eoc(++ptr) && !checkline(*(ptr)));
+			return (*++ptr);
+		}
 		char getnext() {
 			const char* p = ptr;
-			while (!eoc(p) && checkspace(*(++p)));
+			while (!eoc(++p) && checkspace(*(p)));
 			return (*p);
 		}
 		char getnext2() {
@@ -219,7 +231,7 @@ namespace PHG
 	};
 	
 	// get char
-	short get(code& cd)
+	static short get(code& cd)
 	{
 		for (; !cd.eoc(); cd.next()) {
 			char c = cd.cur();
@@ -244,7 +256,7 @@ namespace PHG
 	}
 
 	// 运算
-	var act(code& cd, int valcnt) 
+	static var act(code& cd, int valcnt)
 	{
 		opr o = cd.oprstack.pop();
 		switch (o) {
@@ -311,7 +323,7 @@ namespace PHG
 		}
 	}
 
-	inline var chars2var(code& cd) {
+	static inline var chars2var(code& cd) {
 		static char buff[128];
 		int i = 0;
 		for (; i < 128; i++) {
@@ -326,7 +338,8 @@ namespace PHG
 	}
 
 	// get value
-	void getval(code& cd, short type) {
+	static void getval(code& cd, short type) {
+		
 		if (type == NUMBER) {
 			cd.valstack.push(chars2var(cd));
 			if (cd.oprstack.empty() || !(iscalc(cd.oprstack.cur()) || islogic(cd.oprstack.cur()))) {
@@ -334,7 +347,8 @@ namespace PHG
 			}
 		}
 		else if (type == NAME) {
-			if (cd.funcnamemap.find(cd.getname()) != INVALIDFUN) {
+			if (api_list.find(cd.getname()) != api_list.end() ||
+				cd.funcnamemap.find(cd.getname()) != INVALIDFUN) {
 				cd.valstack.push(callfunc(cd));
 			}
 			else {
@@ -347,7 +361,7 @@ namespace PHG
 		}
 	}
 	// finished trunk
-	void finishtrunk(code& cd, int trunkcnt = 0, char sk = '{', char ek = '}') 
+	static void finishtrunk(code& cd, int trunkcnt = 0, char sk = '{', char ek = '}')
 	{
 		while (!cd.eoc()) {
 			char c = cd.cur();
@@ -369,7 +383,7 @@ namespace PHG
 	}
 
 	// 表达式 for example: x=a+b, v = fun(x), x>2 ||x < 5
-	var expr(code& cd)
+	static var expr(code& cd)
 	{
 		int valcnt = 0;
 		while (!cd.eoc()) {
@@ -425,7 +439,7 @@ namespace PHG
 					cd.valstack.push(v);
 					valcnt++;
 				}
-				else if (c == ')' || c == ';' || c == ',' || c == '{') {
+				else if (c == ')' || c == ';' || c == ',' || c == '{' || c == '\0') {
 
 					if (!cd.oprstack.empty() &&
 						(iscalc(cd.oprstack.cur()) || islogic(cd.oprstack.cur())))
@@ -441,7 +455,7 @@ namespace PHG
 	}
 
 	// single var
-	void singvar(code& cd) {
+	static void singvar(code& cd) {
 		string name = cd.getname();
 		//PRINT("singvar: " << name);
 		cd.next2();
@@ -454,7 +468,7 @@ namespace PHG
 	}
 
 	// statement
-	void statement(code& cd) {
+	static void statement(code& cd) {
 		
 		short type = get(cd);
 		if (type == NAME) {
@@ -476,11 +490,11 @@ namespace PHG
 	}
 
 	// subtrunk
-	int subtrunk(code& cd, var& ret)
+	static int subtrunk(code& cd, var& ret)
 	{
 		while (!cd.eoc()) {
 			short type = get(cd);
-			//PRINTV(type);
+			PRINTV(type);
 			if (cd.cur() == '{') 
 			{
 				cd.next();
@@ -492,6 +506,11 @@ namespace PHG
 			{
 				cd.next();
 				break;
+			}
+			else if (type == '\'')
+			{
+				PRINT("注解");
+				cd.nextline();
 			}
 			else if (type == '?') 
 			{
@@ -590,7 +609,7 @@ namespace PHG
 	}
 	
 	// 函数
-	var callfunc(code& cd) {
+	static var callfunc_phg(code& cd) {
 		funcname fnm = cd.getname();
 		PRINT("callfunc: " << fnm << "()");
 		PRINT("{");
@@ -652,6 +671,17 @@ namespace PHG
 		return ret;
 	}
 
+	static var callfunc(code& cd) {
+		funcname fnm = cd.getname();
+		if (api_list.find(fnm) != api_list.end())
+		{
+			cd.next2();
+			return api_list[fnm](cd);
+		}
+		else
+			return callfunc_phg(cd);
+	}
+
 	// func
 	static void func(code& cd) {
 		funcname fnm = cd.getname();
@@ -663,7 +693,7 @@ namespace PHG
 	}
 
 	// parser
-	void parser(code& cd) {
+	static void parser(code& cd) {
 		PRINT("-------script--------");
 		PRINT(cd.ptr);
 		PRINT("---------------------");
@@ -678,7 +708,7 @@ namespace PHG
 		cd.varmapstack.push();
 		while (!cd.eoc()) {
 			short type = get(cd);
-			PRINTV(type);
+			
 			if (type == '#') {
 				cd.next();
 				func(cd);
@@ -689,6 +719,8 @@ namespace PHG
 			}
 		}
 	}
+
+	code phg_code;
 
 	// dofile
 	void dofile(const char* filename) {
@@ -702,21 +734,27 @@ namespace PHG
 		fread(buf, 1, sz, f);
 		buf[sz] = '\0';
 		fclose(f);
-		code cd(buf);
-		parser(cd);
+		phg_code = code(buf);
+		parser(phg_code);
 		PRINT("\n")
 	}
 
 	// dostring
 	void dostring(const char* str) {
-		code cd(str);
-		parser(cd);
+		phg_code = code(str);
+		parser(phg_code);
 		PRINT("\n")
+	}
+
+	// API
+	void register_api(crstr name, fun_t fun)
+	{
+		api_list[name] = fun;
 	}
 }
 
 void test()
 {
-	//PHG::dostring("aa = 2;BBB = 3;");
+	initphg();
 	PHG::dofile("main.phg");
 }
