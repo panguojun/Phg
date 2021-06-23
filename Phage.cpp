@@ -178,7 +178,7 @@ var act(code & cd, int valcnt){
 	opr o = cd.oprstack.pop();
 	switch(o){
 		case '+':{
-			if(valcnt == 2){
+			if(valcnt >= 2){
 				var b = cd.valstack.pop();
 				var a = cd.valstack.pop();
 				return a + b;
@@ -188,7 +188,7 @@ var act(code & cd, int valcnt){
 			}	
 		}
 		case '-':{
-			if(valcnt == 2){
+			if(valcnt >= 2){
 				var b = cd.valstack.pop();
 				var a = cd.valstack.pop();
 				return a - b;
@@ -310,7 +310,7 @@ var expr(code& cd){
 				cd.oprstack.push(o);
 			cd.next();
 
-			// 一元运算符优先级高！
+			// 脪禄脭陋脭脣脣茫路没脫脜脧脠录露赂脽拢隆
 			if(iscalc(cd.cur())){
 				getval(cd, type, cd.cur());
 				cd.valstack.push(expr(cd));
