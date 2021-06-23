@@ -1,5 +1,5 @@
 /****************************************************************************
-				Phg2.0
+							Phg2.0
 
 ****************************************************************************/
 namespace PHG
@@ -23,7 +23,6 @@ namespace PHG
 	extern void statement(code& cd);
 	extern var callfunc(code& cd);
 
-	//var gvarnamemap[256] = { 0 };
 	char rank[256];
 
 	// -----------------------------------------------------------------------
@@ -48,16 +47,16 @@ namespace PHG
 		const char* buff[1024];
 		int top;
 		void push(const char* c) {
-			ASSERT(top + 1 < 1024)
-				buff[++top] = c;
+			ASSERT(top + 1 < 1024);
+			buff[++top] = c;
 		}
 		const char* pop() {
-			ASSERT(top > -1)
-				return buff[top--];
+			ASSERT(top > -1);
+			return buff[top--];
 		}
 		const char* cur() {
-			ASSERT(top != -1)
-				return buff[top];
+			ASSERT(top != -1);
+			return buff[top];
 		}
 		bool empty() {
 			return top == -1;
@@ -72,12 +71,12 @@ namespace PHG
 		var buff[1024];
 		int top;
 		void push(var v) {
-			PRINT("valstack PUSH " << v);
+			//PRINT("valstack PUSH " << v);
 			ASSERT(top + 1 < 1024);
 			buff[++top] = v;
 		}
 		var pop() {
-			PRINT("valstack POP");
+			//PRINT("valstack POP");
 			ASSERT(top > -1);
 			return buff[top--];
 		}
@@ -117,6 +116,7 @@ namespace PHG
 			top = -1;
 		}
 	};
+
 	struct varmapstack_t
 	{
 		using varmap_t = std::map<varname, var>;
@@ -141,7 +141,7 @@ namespace PHG
 		}
 		var getvar(const char* name)
 		{
-			PRINT("getvar = " << name)
+			//PRINT("getvar = " << name)
 			if (stack.empty())
 				return INVALIDVAR;
 
@@ -352,12 +352,12 @@ namespace PHG
 		while (!cd.eoc()) {
 			char c = cd.cur();
 			if (c == sk) {
-				cd.varmapstack.push();
+				//cd.varmapstack.push();
 				trunkcnt++;
 			}
 			else if (c == ek) {
 				trunkcnt--;
-				cd.varmapstack.pop();
+				//cd.varmapstack.pop();
 
 				if (trunkcnt == 0) {
 					cd.next();
@@ -442,18 +442,15 @@ namespace PHG
 
 	// single var
 	void singvar(code& cd) {
-		const char* name = cd.getname();
-		PRINT("singvar: " << name);
+		string name = cd.getname();
+		//PRINT("singvar: " << name);
 		cd.next2();
 		ASSERT(cd.cur() == '=');
 		cd.next();
 
 		var v = expr(cd);
 		cd.next();
-		cd.varmapstack.addvar(name, v);
-
-		PRINT(name << " = " << v);
-		//PRINTV(cd.cur());
+		cd.varmapstack.addvar(name.c_str(), v);
 	}
 
 	// statement
@@ -545,7 +542,7 @@ namespace PHG
 						}
 
 						cd.ptr = cp;
-						PRINT("loop");
+						PRINT("loop ");
 						goto codepos1;
 					}
 					else {
@@ -591,12 +588,8 @@ namespace PHG
 		}
 		return 0;
 	}
-
-	// trunk
-	void trunk(code& cd, var& ret) {
-		subtrunk(cd, ret);
-	}
-	// ----------------------------------------------------------------------
+	
+	// 函数
 	var callfunc(code& cd) {
 		funcname fnm = cd.getname();
 		PRINT("callfunc: " << fnm << "()");
@@ -668,6 +661,8 @@ namespace PHG
 		cd.next();
 		finishtrunk(cd, 0);
 	}
+
+	// parser
 	void parser(code& cd) {
 		PRINT("-------script--------");
 		PRINT(cd.ptr);
@@ -690,11 +685,12 @@ namespace PHG
 			}
 			else {
 				var ret = INVALIDVAR;
-				trunk(cd, ret);
+				subtrunk(cd, ret);
 			}
 		}
 	}
 
+	// dofile
 	void dofile(const char* filename) {
 		FILE* f = fopen(filename, "rb");
 		ASSERT(f != 0);
@@ -711,6 +707,7 @@ namespace PHG
 		PRINT("\n")
 	}
 
+	// dostring
 	void dostring(const char* str) {
 		code cd(str);
 		parser(cd);
