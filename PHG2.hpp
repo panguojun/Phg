@@ -1,15 +1,49 @@
 /****************************************************************************
 							Phg2.0
+							脚本是群论的扩展
+语法示例:	
+
+'function					
+#blend(a, b, alpha)
+{
+	$ a*(1-alpha) + b*alpha;
+}
+
+'call function
+ab = blend(2,8, 0.25)
+>ab;
+
+'if
+?(i = 1){
+t = t + 1;
+}:{
+t = t - 1;
+}
+>t;
+
+'calc
+yy = 1*2+ 4 * 8;
+> yy;
+
+'loop
+@(yy < 100){
+yy = yy + 1;
+}
+> yy;
 
 ****************************************************************************/
+#define PHG_VAR(name, defaultval) (PHG::gcode.varmapstack.stack.empty() || PHG::gcode.varmapstack.stack.front().find(#name) == PHG::gcode.varmapstack.stack.front().end() ? defaultval : PHG::gcode.varmapstack.stack.front()[#name])
+
 namespace PHG
 {
 	#define INVALIDVAR	0
 	#define INVALIDFUN	cd.funcnamemap.end()
 
-	#define var			float
-	#define opr			char
 	#define varname		string
+	#define var			real
+	#define toint(v)	(int)(v)
+
+	#define opr			char
 	#define funcname	string
 	#define functionptr	const char*
 
@@ -25,9 +59,19 @@ namespace PHG
 
 	char rank[256];
 
+	std::vector<var> gtable;
+
 	// API
-	typedef var (*fun_t)(code& cd);
-	std::map<string, fun_t> api_list;
+	typedef var (*fun_t)(code& cd, int stackpos);
+	struct api_fun_t
+	{
+		int args = 0;
+		fun_t fun;
+	};
+	
+	std::map<string, api_fun_t> api_list;
+	// 运算
+	var(*act)(code& cd, int valcnt);
 
 	// -----------------------------------------------------------------------
 	inline bool checkline(char c) {
@@ -95,6 +139,10 @@ namespace PHG
 			ASSERT(top != -1);
 			ASSERT(top - pos >= 0);
 			return buff[top - pos];
+		}
+		void reset()
+		{
+			top = -1;
 		}
 		valstack_t() {
 			top = -1;
@@ -261,11 +309,11 @@ namespace PHG
 	}
 
 	// 运算
-	static var act(code& cd, int valcnt)
+	var act_default(code& cd, int valcnt)
 	{
 		opr o = cd.oprstack.pop();
 
-		PRINT("act " << o << " valcnt = " << valcnt)
+		PRINT("act:" << o << " valcnt = " << valcnt)
 
 		switch (o) {
 		case '+': {
@@ -275,7 +323,7 @@ namespace PHG
 				return a + b;
 			}
 			else {
-				return +cd.valstack.pop();
+				return cd.valstack.pop();
 			}
 		}
 		case '-': {
@@ -447,7 +495,7 @@ namespace PHG
 					cd.valstack.push(v);
 					valcnt++;
 				}
-				else if (c == ')' || c == ';' || c == ',' || c == '{' || c == '\n') {
+				else if (c == ')' || c == ']' || c == ';' || c == ',' || c == '{' || c == '\n') {
 
 					if (!cd.oprstack.empty() &&
 						(iscalc(cd.oprstack.cur()) || islogic(cd.oprstack.cur())))
@@ -491,7 +539,8 @@ namespace PHG
 		}
 		else if (cd.cur() == '>') {
 			cd.next();
-			PRINT(expr(cd));
+			const var& v = expr(cd);
+			PRINT(v);
 			cd.next();
 		}
 	}
@@ -516,7 +565,7 @@ namespace PHG
 			}
 			else if (type == '\'')
 			{
-				PRINT("注解");
+				//PRINT("注解");
 				cd.nextline();
 			}
 			else if (type == '?') 
@@ -577,7 +626,7 @@ namespace PHG
 				}
 				else 
 				{
-					int loopcnt = expr(cd);
+					int loopcnt = toint(expr(cd));
 					cd.next();
 					const char* cp = cd.ptr;
 					for (int i = 0; i < loopcnt; i++) {
@@ -693,6 +742,9 @@ namespace PHG
 		if (api_list.find(fnm) != api_list.end())
 		{
 			PRINT("API:" << fnm);
+			api_fun_t& apifun = api_list[fnm];
+			apifun.args = 0;
+
 			ASSERT(cd.next2() == '(');
 
 			cd.next();
@@ -710,9 +762,12 @@ namespace PHG
 					var e = expr(cd);
 					//PRINTV(e);
 					cd.valstack.push(e);
+					apifun.args++;
 				}
 			}
-			return api_list[fnm](cd);
+			
+			var ret = apifun.fun(cd, apifun.args);
+			return ret;
 		}
 		else
 			return callfunc_phg(cd);
@@ -728,11 +783,36 @@ namespace PHG
 		finishtrunk(cd, 0);
 	}
 
+	// table
+	static void table(code& cd)
+	{
+		PRINT("table: ");
+
+		cd.next();
+		while (!cd.eoc()) {
+			char c = cd.cur();
+			//PRINT(c);
+			if (c == ']') {
+				cd.next();
+				break;
+			}
+			else if (c == ',') {
+				cd.next();
+				continue;
+			}
+			else {
+				var e = expr(cd);
+				PRINTV(e);
+				gtable.push_back(e);
+			}
+		}
+	}
+
 	// parser
 	static void parser(code& cd) {
-		PRINT("-------script--------");
+		PRINT("--------PHG---------");
 		PRINT(cd.ptr);
-		PRINT("---------------------");
+		PRINT("--------------------");
 		
 		rank['+'] = 1;
 		rank['-'] = 1;
@@ -740,7 +820,7 @@ namespace PHG
 		rank['/'] = 2;
 		rank['!'] = 3;
 
-		getchar();
+		//getchar();
 
 		cd.varmapstack.push();
 		while (!cd.eoc()) {
@@ -750,6 +830,9 @@ namespace PHG
 				cd.next();
 				func(cd);
 			}
+			else if (type == '[') {
+				table(cd);
+			}
 			else {
 				var ret = INVALIDVAR;
 				subtrunk(cd, ret);
@@ -757,10 +840,11 @@ namespace PHG
 		}
 	}
 
-	code phg_code;
+	code gcode;
 
 	// dofile
-	void dofile(const char* filename) {
+	void dofile(const char* filename)
+	{
 		FILE* f = fopen(filename, "rb");
 		ASSERT(f != 0);
 		char buf[1024];
@@ -771,27 +855,34 @@ namespace PHG
 		fread(buf, 1, sz, f);
 		buf[sz] = '\0';
 		fclose(f);
-		phg_code = code(buf);
-		parser(phg_code);
+		parser(gcode = code(buf));
 		PRINT("\n")
 	}
 
 	// dostring
-	void dostring(const char* str) {
-		phg_code = code(str);
-		parser(phg_code);
+	void dostring(const char* str) 
+	{
+		parser(gcode = code(str));
 		PRINT("\n")
 	}
 
 	// API
 	void register_api(crstr name, fun_t fun)
 	{
-		api_list[name] = fun;
+		api_list[name].fun = fun;
+	}
+
+	// Init
+	void init()
+	{
+		if(api_list.empty())
+			initphg();
+		act = act_default;
 	}
 }
 
 void test()
 {
-	initphg();
+	PHG::init();
 	PHG::dofile("main.phg");
 }
