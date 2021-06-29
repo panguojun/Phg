@@ -441,12 +441,14 @@ namespace PHG
 	// 表达式 for example: x=a+b, v = fun(x), x > 2 || x < 5
 	static var expr(code& cd)
 	{
-		int valcnt = 0;
+		//PRINT("expr(");
+		int args = 0;
 		while (!cd.eoc()) {
 			short type = get(cd);
+
 			if (type == NAME || type == NUMBER) {
 				getval(cd, type);
-				valcnt++;
+				args++;
 			}
 			else if (type == OPR) {
 				opr o = cd.cur();
@@ -454,27 +456,42 @@ namespace PHG
 					cd.oprstack.setcur(o);
 				else
 					cd.oprstack.push(o);
+
+				if (iscalc(cd.cur())) {
+					args++;
+				}
+
 				cd.next();
 
 				if (iscalc(cd.cur())) {
-					getval(cd, type);
 					cd.valstack.push(expr(cd));
-					valcnt++;
+					args++;
 				}
 				else {
-					char no = cd.getnext();
-					if (cd.cur() != '(' && iscalc(no))
+					if (cd.cur() == '(')
 					{
+						cd.next();
+						var v = expr(cd);
+						cd.valstack.push(v);
+						args++;
+					}
+					char no = cd.getnext();
+					if (cd.cur() != '(' && 
+						iscalc(no))
+					{
+						if (cd.cur() == ')')
+							cd.next();
+
 						type = get(cd);
 						if (rank[o] >= rank[no]) {
 							getval(cd, type);
-							cd.valstack.push(act(cd, valcnt));
-							valcnt++;
+							cd.valstack.push(act(cd, args));
+							args++;
 						}
 						else {
 							getval(cd, type);
 							cd.valstack.push(expr(cd));
-							valcnt++;
+							args++;
 						}
 					}
 				}
@@ -493,14 +510,20 @@ namespace PHG
 					var v = expr(cd);
 					cd.next();
 					cd.valstack.push(v);
-					valcnt++;
+					args++;
 				}
 				else if (c == ')' || c == ']' || c == ';' || c == ',' || c == '{' || c == '\n') {
 
 					if (!cd.oprstack.empty() &&
 						(iscalc(cd.oprstack.cur()) || islogic(cd.oprstack.cur())))
-						return act(cd, valcnt);
+					{
+						//const var& ret = act(cd, args);
+						//PRINT(")");
+						return act(cd, args);
+					}
 					else {
+						//const var& ret = cd.valstack.pop();
+						//PRINT(")");
 						return cd.valstack.pop();
 					}
 				}
