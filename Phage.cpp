@@ -308,6 +308,8 @@ var expr(code& cd){
 				cd.oprstack.setcur(o);
 			else
 				cd.oprstack.push(o);
+			if (iscalc(cd.cur())) 
+				valcnt++;
 			cd.next();
 
 			// Ò»ÔªÔËËã·ûÓÅÏÈ¼¶¸ß£¡
@@ -317,9 +319,19 @@ var expr(code& cd){
 				valcnt ++;
 			}
 			else{
+				if (cd.cur() == '(')
+				{
+					cd.next();
+					var v = expr(cd);
+					cd.valstack.push(v);
+					valcnt++;
+				}
 				char no = cd.getnext();
 				if(cd.cur() != '(' && iscalc(no))
 				{
+					if (cd.cur() == ')')
+						cd.next();
+					
 					type = get(cd);
 					if(rank[o] >= rank[no]){
 						getval(cd, type, cd.cur());
